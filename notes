@@ -1,0 +1,155 @@
+
+
+
+export JAVA_HOME=/opt/homebrew/opt/openjdk@11
+
+export SPARK_HOME=/opt/homebrew/opt/apache-spark/libexec
+export PATH=$SPARK_HOME/bin:$PATH
+
+spark-sql \
+    --packages 'org.apache.hudi:hudi-spark3.4-bundle_2.12:0.14.0,org.apache.hadoop:hadoop-aws:3.3.2' \
+    --conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer' \
+    --conf 'spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension' \
+    --conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog' \
+    --conf 'spark.kryo.registrator=org.apache.spark.HoodieSparkKryoRegistrar' \
+    --conf "spark.hadoop.fs.s3a.access.key=admin" \
+    --conf "spark.hadoop.fs.s3a.secret.key=password" \
+    --conf "spark.hadoop.fs.s3a.endpoint=http://127.0.0.1:9000" \
+    --conf "spark.hadoop.fs.s3a.path.style.access=true" \
+    --conf "fs.s3a.signing-algorithm=S3SignerType" \
+    --conf "spark.sql.catalogImplementation=hive" \
+    --conf "spark.hadoop.hive.metastore.uris=thrift://localhost:9083"
+
+
+
+CREATE SCHEMA hudi_db LOCATION 's3a://warehouse/';
+
+USE hudi_db;
+
+CREATE TABLE orders (
+    order_id STRING,
+    name STRING,
+    order_value DOUBLE,
+    priority INT,
+    state STRING,
+    order_date STRING,
+    customer_id STRING,
+    ts STRING
+)
+USING hudi
+LOCATION 's3a://warehouse/default/table_name=orders';
+
+
+INSERT INTO orders
+VALUES
+    ('order001', 'Product A', 100.00, 1, 'California', '2024-04-03', 'cust001', '1234567890'),
+    ('order002', 'Product B', 150.00, 2, 'New York', '2024-04-03', 'cust002', '1234567890'),
+    ('order003', 'Product C', 200.00, 1, 'Texas', '2024-04-03', 'cust003', '1234567890');
+
+
+
+
+CREATE TABLE customers (
+    customer_id STRING,
+    name STRING,
+    state STRING,
+    city STRING,
+    email STRING,
+    created_at STRING,
+    ts STRING
+)
+USING hudi
+OPTIONS (
+    primaryKey = 'customer_id',
+    path 's3a://warehouse/default/table_name=bronze_customers'
+);
+
+INSERT INTO customers
+VALUES
+    ('cust001', 'John', 'California', 'San Francisco', 'john@example.com', '2024-04-03T09:00:00', '1234567890'),
+    ('cust002', 'Alice', 'New York', 'New York City', 'alice@example.com', '2024-04-03T09:00:00', '1234567890'),
+    ('cust003', 'Bob', 'Texas', 'Austin', 'bob@example.com', '2024-04-03T09:00:00', '1234567890');
+
+
+
+
+spark-submit \
+    --class org.apache.hudi.utilities.streamer.HoodieStreamer \
+    --packages 'org.apache.hudi:hudi-spark3.4-bundle_2.12:0.14.0,org.apache.hadoop:hadoop-aws:3.3.2' \
+    --properties-file spark-config.properties \
+    --master 'local[*]' \
+    --executor-memory 1g \
+    --jars '/Users/soumilshah/IdeaProjects/SparkProject/deltastreamerBroadcastJoins/jar/hudi-extensions-0.1.0-SNAPSHOT-bundled.jar,/Users/soumilshah/IdeaProjects/SparkProject/deltastreamerBroadcastJoins/jar/hudi-java-client-0.14.0.jar' \
+     /Users/soumilshah/IdeaProjects/SparkProject/DeltaStreamer/jar/hudi-utilities-slim-bundle_2.12-0.14.0.jar \
+    --table-type COPY_ON_WRITE \
+    --target-base-path 's3a://warehouse/default/table_name=customer_dim'  \
+    --target-table customer_dim \
+    --op UPSERT \
+    --enable-sync \
+    --enable-hive-sync \
+    --sync-tool-classes 'io.onetable.hudi.sync.OneTableSyncTool' \
+    --transformer-class 'org.apache.hudi.utilities.transform.SqlFileBasedTransformer' \
+    --source-limit 4000000 \
+    --source-ordering-field ts \
+    --source-class org.apache.hudi.utilities.sources.HoodieIncrSource \
+    --props hudi_tbl.props
+
+--min-sync-interval-seconds 20 \
+--continuous \
+
+CREATE TABLE customer_dim (
+    customer_dim_key STRING,
+    customer_id STRING,
+    customer_name STRING,
+    state STRING,
+    city STRING,
+    email STRING,
+    created_at STRING,
+    ts STRING,
+    is_current BOOLEAN
+)
+USING hudi
+OPTIONS (
+    primaryKey = 'customer_dim_key',
+    path 's3a://warehouse/default/table_name=customer_dim'
+);
+
+
+UPDATE customers
+SET email = 'updat***@john.com'
+WHERE customer_id = 'cust001';
+
+select * from customers WHERE customer_id = 'cust001';
+
+select * from customer_dim WHERE customer_id = 'cust001';
+
+
+------------------------------------------------------
+COLUMN_STATS INDEX
+------------------------------------------------------------
+MODE execute | schedule  | scheduleAndExecute
+
+spark-submit \
+    --class org.apache.hudi.utilities.HoodieIndexer \
+    --properties-file spark-config.properties \
+    --packages 'org.apache.hudi:hudi-spark3.4-bundle_2.12:0.14.0,org.apache.hadoop:hadoop-aws:3.3.2' \
+    --master 'local[*]' \
+    --executor-memory 1g \
+     /Users/soumilshah/IdeaProjects/SparkProject/DeltaStreamer/jar/hudi-utilities-slim-bundle_2.12-0.14.0.jar \
+     --mode scheduleAndExecute \
+    --base-path 's3a://warehouse/default/table_name=customer_dim' \
+    --table-name customer_dim \
+    --index-types COLUMN_STATS \
+    --hoodie-conf "hoodie.metadata.enable=true" \
+    --hoodie-conf "hoodie.metadata.index.async=true" \
+    --hoodie-conf "hoodie.metadata.index.column.stats.enable=true" \
+    --hoodie-conf "hoodie.write.concurrency.mode=optimistic_concurrency_control" \
+    --hoodie-conf "hoodie.write.lock.provider=org.apache.hudi.client.transaction.lock.InProcessLockProvider" \
+    --parallelism 2 \
+    --spark-memory 2g
+
+
+
+
+
+

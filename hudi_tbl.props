@@ -1,0 +1,17 @@
+hoodie.streamer.source.hoodieincr.missing.checkpoint.strategy=READ_UPTO_LATEST_COMMIT
+hoodie.streamer.source.hoodieincr.path=s3a://warehouse/default/table_name=bronze_customers
+hoodie.datasource.write.recordkey.field=customer_dim_key
+hoodie.datasource.write.partitionpath.field=
+hoodie.datasource.write.precombine.field=ts
+hoodie.streamer.transformer.sql.file=/Users/soumilshah/IdeaProjects/SparkProject/deltastreamerBroadcastJoins/join.sql
+
+hoodie.datasource.hive_sync.partition_extractor_class=org.apache.hudi.hive.MultiPartKeysValueExtractor
+hoodie.datasource.hive_sync.metastore.uris=thrift://localhost:9083
+hoodie.datasource.hive_sync.mode=hms
+hoodie.datasource.hive_sync.enable=true
+hoodie.datasource.hive_sync.database=hudi_db
+hoodie.datasource.hive_sync.table=customer_dim
+hoodie.datasource.write.hive_style_partitioning=true
+
+hoodie.onetable.formats.to.sync=DELTA,ICEBERG
+hoodie.onetable.target.metadata.retention.hr=168
