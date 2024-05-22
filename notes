@@ -94,8 +94,7 @@ spark-submit \
     --source-class org.apache.hudi.utilities.sources.HoodieIncrSource \
     --props hudi_tbl.props
 
---min-sync-interval-seconds 20 \
---continuous \
+
 
 CREATE TABLE customer_dim (
     customer_dim_key STRING,
