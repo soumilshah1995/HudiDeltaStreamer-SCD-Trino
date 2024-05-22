@@ -6,3 +6,15 @@ HudiDeltaStreamer-SCD-Trino
 ```
 https://drive.google.com/drive/folders/1mCxcapOPbt0TujYZEyBYEz7vnzqmWoxW?usp=share_link
 ```
+
+
+# Demo Video 
+
+https://www.youtube.com/watch?v=oCLlSNOFXlI
+
+
+
+# Complete Deep Dive Video 
+
+
+https://www.youtube.com/watch?v=nuctGgYpIP8&t=1274s
